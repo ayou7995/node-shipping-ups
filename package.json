@@ -37,6 +37,11 @@
     "node.extend": "^1.1.5",
     "soap": "^0.9.1",
     "xml2js": "^0.4.15",
-    "xmlbuilder": "^2.6.4"
-  }
+    "xmlbuilder": "^2.6.4",
+    "base64-img": "^1.0.3",
+    "python-shell": "^0.4.0",
+    "xlsx": "^0.11.3",
+    "xlsx-style": "^0.8.13"
+  },
+  "devDependencies": {}
 }
