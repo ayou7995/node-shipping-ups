@@ -48,7 +48,8 @@ if __name__ == '__main__':
     cnx = mysql.connector.connect(user='root', password='', database='soundbotdb')
     cursor = cnx.cursor(buffered=True)
 
-    orderid = 'GG-179Z-R9WT-31Z9-FML5'
+    ps_data = sys.argv[1:]
+    orderid = ps_data[1]
     cursor.execute("""  SELECT o.order_date, o.orderid, o.parent_orderid, 
                                ri.shipment_addr_name, ri.shipment_addr_street_1,
                                ri.shipment_addr_street_2, ri.shipment_addr_city,
@@ -63,36 +64,45 @@ if __name__ == '__main__':
                         JOIN RECEIVER_INFO as ri
                         ON oi.fulfillment_id = ri.fulfillment_id
                         WHERE o.orderid = '""" + orderid + "'")
-    pl_data = cursor.fetchall()
+    db_fetch_data = cursor.fetchall()
 
-    if pl_data:
-        pl_data = list(pl_data[0])
-        # pl_data[15] = ','.join([str(i) for i in range(200)])
-        putText(template, pl_data[0].strftime('%Y-%m-%d'), DATE_BEGIN_WIDTH, DATE_BEGIN_HEIGHT)
-        putText(template, pl_data[1], DATE_BEGIN_WIDTH, ORDERID_BEGIN_HEIGHT)
-        putText(template, pl_data[2], PARENTID_BEGIN_WIDTH, PARENTID_BEGIN_HEIGHT)
+    if db_fetch_data:
+        db_fetch_data = list(db_fetch_data[0])
+
+        ps_data[0] = db_fetch_data[0]
+        ps_data[5] = db_fetch_data[5]
+        ps_data[9] = db_fetch_data[9]
+        ps_data[11] = db_fetch_data[11]
+        ps_data[13] = db_fetch_data[13]
+        ps_data[15] = db_fetch_data[15]
+
+        putText(template, ps_data[0].strftime('%Y-%m-%d'), DATE_BEGIN_WIDTH, DATE_BEGIN_HEIGHT)
+        putText(template, ps_data[1], DATE_BEGIN_WIDTH, ORDERID_BEGIN_HEIGHT)
+        putText(template, ps_data[2], PARENTID_BEGIN_WIDTH, PARENTID_BEGIN_HEIGHT)
         for i in range(3,9):
             width = SHIPTO_BEGIN_WIDTH
             height = SHIPTO_BEGIN_HEIGHT + i * ROW_HEIGHT
             if i == 7:
-                width = width + len(pl_data[i-1]) * WORD_WIDTH
+                width = width + len(ps_data[i-1]) * WORD_WIDTH
             if i >=7:
                 height = height - ROW_HEIGHT
-            putText(template, pl_data[i], width, height)
-        putText(template, pl_data[9], SHIPTO_BEGIN_WIDTH, PARENTID_BEGIN_HEIGHT)
-        putText(template, pl_data[10], IN_BEGIN_WIDTH, ITEM_BEGIN_HEIGHT)
-        putText(template, pl_data[11], UPC_BEGIN_WIDTH, ITEM_BEGIN_HEIGHT)
-        putText(template, pl_data[12], SKU_BEGIN_WIDTH, ITEM_BEGIN_HEIGHT)
+            putText(template, ps_data[i], width, height)
+        putText(template, ps_data[9], SHIPTO_BEGIN_WIDTH, PARENTID_BEGIN_HEIGHT)
+        putText(template, ps_data[10], IN_BEGIN_WIDTH, ITEM_BEGIN_HEIGHT)
+        putText(template, ps_data[11], UPC_BEGIN_WIDTH, ITEM_BEGIN_HEIGHT)
+        putText(template, ps_data[12], SKU_BEGIN_WIDTH, ITEM_BEGIN_HEIGHT)
 
-        item_des = chunkstring(pl_data[13], ITEM_DESCRIPTION_SENT_LENGTH)
+        item_des = chunkstring(ps_data[13], ITEM_DESCRIPTION_SENT_LENGTH)
         for i in range(len(item_des)):
             putText(template, item_des[i], ID_BEING_WIDTH, ITEM_BEGIN_HEIGHT + ROW_HEIGHT * i)
-        putText(template, str(pl_data[14]), QTY_BEGIN_WIDTH, ITEM_BEGIN_HEIGHT)
+        putText(template, str(ps_data[14]), QTY_BEGIN_WIDTH, ITEM_BEGIN_HEIGHT)
 
-        gift_msg = chunkstring(pl_data[15], GIFT_MESSAGE_SENT_LENGTH)
+        gift_msg = chunkstring(ps_data[15], GIFT_MESSAGE_SENT_LENGTH)
         for i in range(len(gift_msg)):
             putText(template, gift_msg[i], GM_BEGIN_WIDTH, GIFT_BEGIN_HEIGHT + ROW_HEIGHT * i)
 
-    cv2.imwrite('test_packing_slip.png', template)
+    
+    # print('{0}/{1}_ps.png'.format(ps_data[16], ps_data[17]))
+    cv2.imwrite('{0}/{1}_ps.png'.format(ps_data[16], ps_data[17]), template)
     cursor.close()
 

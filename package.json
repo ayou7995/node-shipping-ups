@@ -34,14 +34,18 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "node.extend": "^1.1.5",
-    "soap": "^0.9.1",
-    "xml2js": "^0.4.15",
-    "xmlbuilder": "^2.6.4",
+    "argv": "0.0.2",
     "base64-img": "^1.0.3",
+    "dateformat": "^2.0.0",
+    "mkdirp": "^0.5.1",
+    "node.extend": "^1.1.5",
+    "path": "^0.12.7",
     "python-shell": "^0.4.0",
+    "soap": "^0.9.1",
     "xlsx": "^0.11.3",
-    "xlsx-style": "^0.8.13"
+    "xlsx-style": "^0.8.13",
+    "xml2js": "^0.4.15",
+    "xmlbuilder": "^2.6.4"
   },
   "devDependencies": {}
 }
