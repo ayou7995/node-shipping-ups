@@ -31,6 +31,10 @@ var args = argv.option([
   }
 ]).run();
 
+var DEBUG_MODE;
+if (args.options.hasOwnProperty('debug')) {
+  DEBUG_MODE = args.options.debug;
+}
 var process_date = dateFormat(new Date(), "yyyymmdd");
 if (args.options.hasOwnProperty('date')) {
   process_date = args.options.date;
@@ -76,7 +80,9 @@ function createPackingSlip(obj) {
   };
   PythonShell.run('create_packing_slip.py', create_ps_options, function (err, results) {
     if (err) throw err;
-    else console.log('create packing slip final results: %j', results);
+    else{
+      if (DEBUG_MODE)  console.log('create packing slip final results: %j', results);
+    }
   });
 }
 
@@ -121,16 +127,19 @@ function createShippingLabel(obj) {
   );
   p1.then(function(result) {
     let label_name = result.data.index_ref2.concat('_sl');
-    console.log(label_name);
     base64Img.img('data:image/gif;base64,'.concat(result.image), 
                   label_dir, 
                   label_name, 
-                  function(err, filepath){ if (err) throw err; }
-    );
+                  function(err, filepath){ if (err) throw err; });
     return({name:label_name.concat('.gif'), data:result.data});
   }, function(reject) {
-    console.log('rejection after promise');
-    console.log(reject);
+    if (DEBUG_MODE) {
+      console.log('rejection after promise');
+      console.log(reject);
+    }
+  }).catch(function(e) {
+    console.log('first then');
+    console.log(e); // "oh, no!"
   }).then(function(result) {
     if (result!==null) {
       let add_ref_options = {
@@ -148,9 +157,14 @@ function createShippingLabel(obj) {
       };
       PythonShell.run('add_reference.py', add_ref_options, function (err, results) {
         if (err) throw err;
-        else console.log('shipping label final results: %j', results);
+        else {
+          if (DEBUG_MODE) console.log('shipping label final results: %j', results);
+        }
       });
     }
+  }).catch(function(e) {
+    console.log('second then');
+    console.log(e); // "oh, no!"
   })
 };
 
@@ -265,7 +279,7 @@ function createLabel(){
     console.log(row_count);
     console.log(obj.index_ref2);
     console.log(obj.service);
-    
+
     if (obj.service !== 'Error') {
       createShippingLabel(obj);
       createPackingSlip(obj);
