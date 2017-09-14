@@ -3,6 +3,15 @@ import sys
 import imghdr
 from PIL import Image
 
+def toRatio(img):
+    imgHeight = img.shape[0]
+    imgWidth = img.shape[1]
+    wantedWidth = int( imgHeight * 5.5 / 8 )
+    lpad = int((wantedWidth - imgWidth) / 2)
+    rpad = wantedWidth - imgWidth - lpad
+    return cv2.copyMakeBorder(img, 0, 0, lpad, rpad, cv2.BORDER_CONSTANT, value = [255,255,255])
+
+
 if __name__ == '__main__':
 
     gif_name = sys.argv[1]
@@ -32,4 +41,6 @@ if __name__ == '__main__':
     cv2.putText(img,ref_4,(80,shape[0]+210), font, 0.7, (0,0,0), 1, cv2.LINE_AA)
     cv2.putText(img,'Reference Number 5',(20,shape[0]+240), font, 0.5, (0,0,0), 1, cv2.LINE_AA)
     cv2.putText(img,ref_5,(80,shape[0]+270), font, 0.7, (0,0,0), 1, cv2.LINE_AA)
+    img = toRatio(img)
+    
     cv2.imwrite(png_name, img)

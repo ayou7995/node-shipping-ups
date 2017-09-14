@@ -81,7 +81,7 @@ function createPackingSlip(obj) {
   PythonShell.run('create_packing_slip.py', create_ps_options, function (err, results) {
     if (err) throw err;
     else{
-      if (DEBUG_MODE)  console.log('create packing slip final results: %j', results);
+      if (DEBUG_MODE)  console.log('$$$$ create packing slip final results: %j $$$$', results);
     }
   });
 }
@@ -95,53 +95,62 @@ function createShippingLabel(obj) {
   data['packages'] = slInfo.buildPackages(obj);
   var option = slInfo.buildOption(obj);
 
-  var p1 = new Promise (
-    (resolve, reject) => {
-      ups.confirm(data, option, function(err, res) {
-        if(err) {
-          reject(err);
-        }
-        if (res != null) {
-          if (res.hasOwnProperty('ShipmentDigest')) {
-            ups.accept(res.ShipmentDigest, function(err, res) {
-              if(err){
-                reject(err);
-              }
-              if(res.hasOwnProperty('ShipmentResults')){
-                if(res['ShipmentResults'].hasOwnProperty('PackageResults')){
-                  if(res['ShipmentResults']['PackageResults'].hasOwnProperty('LabelImage')){
-                    if(res['ShipmentResults']['PackageResults']['LabelImage'].hasOwnProperty('GraphicImage')){
-                      resolve({
-                        image : res.ShipmentResults.PackageResults.LabelImage.GraphicImage, 
-                        data : obj
-                      });
-                    }
-                  }               
-                }
-              }
-            })
+  run(data, option);
+
+  async function asyncUPSCall(data, option) {
+    var returnValue;
+    var upsCall =  await new Promise (
+      (resolve, reject) => {
+        ups.confirm(data, option, function(err, res) {
+          if(err) {
+            reject(err);
+            //throw err;
           }
-        }
-      });
-    }
-  );
-  p1.then(function(result) {
-    let label_name = result.data.index_ref2.concat('_sl');
-    base64Img.img('data:image/gif;base64,'.concat(result.image), 
-                  label_dir, 
-                  label_name, 
-                  function(err, filepath){ if (err) throw err; });
-    return({name:label_name.concat('.gif'), data:result.data});
-  }, function(reject) {
-    if (DEBUG_MODE) {
-      console.log('rejection after promise');
-      console.log(reject);
-    }
-  }).catch(function(e) {
-    console.log('first then');
-    console.log(e); // "oh, no!"
-  }).then(function(result) {
-    if (result!==null) {
+          if (res != null) {
+            if (res.hasOwnProperty('ShipmentDigest')) {
+              ups.accept(res.ShipmentDigest, function(err, res) {
+                if(err){
+                  reject(err);
+                  //throw err;
+                }
+                else{
+                  if(res.hasOwnProperty('ShipmentResults')){
+                    if(res['ShipmentResults'].hasOwnProperty('PackageResults')){
+                      if(res['ShipmentResults']['PackageResults'].hasOwnProperty('LabelImage')){
+                        if(res['ShipmentResults']['PackageResults']['LabelImage'].hasOwnProperty('GraphicImage')){
+                          resolve({
+                            image : res.ShipmentResults.PackageResults.LabelImage.GraphicImage, 
+                            data : obj
+                          });
+                        }
+                      }               
+                    }
+                  }
+                }
+              })
+            }
+          }
+        });
+      }
+    ).then(function(result) {
+      let label_name = result.data.index_ref2.concat('_sl');
+      base64Img.img('data:image/gif;base64,'.concat(result.image), 
+                    label_dir, 
+                    label_name, 
+                    function(err, filepath){ if (err) throw err; });
+      //return({name:label_name.concat('.gif'), data:result.data});
+      returnValue = {name:label_name.concat('.gif'), data:result.data};
+    }, function(reject) {
+      if (DEBUG_MODE) {
+        console.log(' ----- rejection after promise ------');
+        console.log(reject);
+      }
+    })
+    return returnValue;
+  }
+  async function run(data, option) {
+    var result = await asyncUPSCall(data, option);
+    if (result != null || typeof result !== 'undefined') {
       let add_ref_options = {
         mode: 'text',
         pythonPath: '/usr/bin/python',
@@ -158,14 +167,43 @@ function createShippingLabel(obj) {
       PythonShell.run('add_reference.py', add_ref_options, function (err, results) {
         if (err) throw err;
         else {
-          if (DEBUG_MODE) console.log('shipping label final results: %j', results);
+          if (DEBUG_MODE) console.log('$$$$ shipping label final results: %j $$$$', results);
         }
       });
     }
-  }).catch(function(e) {
-    console.log('second then');
-    console.log(e); // "oh, no!"
-  })
+    else{
+      if (DEBUG_MODE) console.log(obj.index_ref2.concat(' fail to create shipping label'))
+    }
+  }
+  //.then(function(result) {
+    //if (result == null || typeof result === 'undefined') {
+      //let add_ref_options = {
+        //mode: 'text',
+        //pythonPath: '/usr/bin/python',
+        //scriptPath: python_script_path,
+        //args: [
+          //path.join(label_dir, result.name), 
+          //obj.fulfillment_line_item_id_ref1, 
+          //'SoundBotGroupon',
+          //obj.MasterSalesOrderNum_ref5,
+          //obj.SKU_QTY,
+          //obj.packing_package_type
+        //]
+      //};
+      //PythonShell.run('add_reference.py', add_ref_options, function (err, results) {
+        //if (err) throw err;
+        //else {
+          //if (DEBUG_MODE) console.log('shipping label final results: %j', results);
+        //}
+      //});
+    //}
+    //else{
+      //console.log(obj.index_ref2.concat(' fail to create shipping label'))
+    //}
+  //}).catch(function(e) {
+    //console.log('second then');
+    //console.log(e); // "oh, no!"
+  //})
 };
 
 function ShippingLabelInfo() {
@@ -288,7 +326,7 @@ function createLabel(){
     if(++row_count == xlsxdata.length){
       return;
     }
-    setTimeout(labelLoop, 1000);
+    setTimeout(labelLoop, 3000);
   }
 
 }
