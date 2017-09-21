@@ -50,12 +50,14 @@ def toRatio(img):
     bpad = wantedHeight - imgHeight - tpad
     return cv2.copyMakeBorder(img, tpad, bpad, 0, 0, cv2.BORDER_CONSTANT, value = [255,255,255])
 
+ps_template_path = 'C:\\Users\\TC710-Admin\\Desktop\\ayou7995\\SoundBot\\create_label\\PackingSlipTemplate.png';
+# ps_template_path = '/home/ayou7995/NTUEE/8th_semester/SoundBot/create_label/PackingSlipTemplate.png';
 if __name__ == '__main__':
     
-    img = cv2.imread('../PackingSlipTemplate.png', cv2.IMREAD_COLOR)
+    img = cv2.imread(ps_template_path, cv2.IMREAD_COLOR)
     shape = img.shape
  
-    cnx = mysql.connector.connect(user='root', password='', database='soundbotdb')
+    cnx = mysql.connector.connect(user='root', password='', database='groupondb')
     cursor = cnx.cursor(buffered=True)
 
     ps_data = sys.argv[1:]
@@ -127,6 +129,6 @@ if __name__ == '__main__':
         img[tpad:tpad+barImgHeight, lpad:lpad+barImgWidth, :] = barcode_img
         img = toRatio(img)
 
-    cv2.imwrite('{0}/{1}_ps.png'.format(ps_data[16], ps_data[17]), img)
+    cv2.imwrite('{0}/{1}_{2}_ps.png'.format(ps_data[16], ps_data[17], ps_data[2]), img)
     cursor.close()
 

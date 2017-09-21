@@ -40,22 +40,40 @@ if (args.options.hasOwnProperty('date')) {
   process_date = args.options.date;
 }
 
-const soundbot_base_dir = '/home/ayou7995/NTUEE/8th_semester/SoundBot/';
-const groupon_ups_upload_dir = path.join(soundbot_base_dir, 'garbagecan/groupon_ups_upload/');
+// const soundbot_base_dir = '/home/ayou7995/NTUEE/8th_semester/SoundBot/';
+// const groupon_ups_upload_dir = path.join(soundbot_base_dir, 'garbagecan/groupon_ups_upload/');
+// const python_script_path = path.join(soundbot_base_dir, 'create_label/src/');
+// const label_dir = path.join(soundbot_base_dir, 'create_label', 'labels', process_date);
+// const python_path = '/usr/bin/python/';
+const soundbot_base_dir = 'C:\\Users\\TC710-Admin\\Desktop\\ayou7995\\SoundBot';
+const groupon_ups_upload_dir = 'C:\\Users\\TC710-Admin\\Dropbox\\GrouponOrders\\groupon_ups_upload';
 const python_script_path = path.join(soundbot_base_dir, 'create_label/src/');
-const label_dir = path.join(soundbot_base_dir, 'create_label', 'labels', process_date);
+const label_dir = path.join('C:\\Users\\TC710-Admin\\Dropbox\\GrouponOrders\\labels', process_date);
+const image_dir = path.join(label_dir, 'image');
+const python_path = 'C:\\\\Users\\TC710-Admin\\AppData\\Local\\Programs\\Python\\Python36\\python.exe';
 
 mkdirp(label_dir, function (err) {
   if (err) console.error(err);
 });
 
-var workbook = XLSX.readFile(path.join(groupon_ups_upload_dir, 'Groupon_'+process_date+'.xlsx'));
+mkdirp(image_dir, function (err) {
+  if (err) console.error(err);
+});
+
+var workbook;
+try {
+  workbook = XLSX.readFile(path.join(groupon_ups_upload_dir, 'Groupon_'+process_date+'.xlsx'));
+}
+catch(err){ 
+  console.log(err);
+  process.exit(1);
+}
 
 function createPackingSlip(obj) {
 
   let create_ps_options = {
     mode: 'text',
-    pythonPath: '/usr/bin/python',
+    pythonPath: python_path,
     scriptPath: python_script_path,
     args: [
       'item order date',
@@ -74,7 +92,7 @@ function createPackingSlip(obj) {
       'item name',
       obj.Qty,
       'item gift message',
-      label_dir, // for storing to correct path
+      image_dir, // for storing to correct path
       obj.index_ref2 // name of label
     ]
   };
@@ -133,9 +151,10 @@ function createShippingLabel(obj) {
         });
       }
     ).then(function(result) {
-      let label_name = result.data.index_ref2.concat('_sl');
+      let obj = result.data;
+      let label_name = obj.index_ref2.concat('_').concat(obj.Parent_ID).concat('_sl');
       base64Img.img('data:image/gif;base64,'.concat(result.image), 
-                    label_dir, 
+                    image_dir, 
                     label_name, 
                     function(err, filepath){ if (err) throw err; });
       //return({name:label_name.concat('.gif'), data:result.data});
@@ -153,10 +172,10 @@ function createShippingLabel(obj) {
     if (result != null || typeof result !== 'undefined') {
       let add_ref_options = {
         mode: 'text',
-        pythonPath: '/usr/bin/python',
+        pythonPath: python_path,
         scriptPath: python_script_path,
         args: [
-          path.join(label_dir, result.name), 
+          path.join(image_dir, result.name), 
           obj.fulfillment_line_item_id_ref1, 
           'SoundBotGroupon',
           obj.MasterSalesOrderNum_ref5,
@@ -165,7 +184,7 @@ function createShippingLabel(obj) {
         ]
       };
       PythonShell.run('add_reference.py', add_ref_options, function (err, results) {
-        if (err) throw err;
+        if (err) console.log(err);
         else {
           if (DEBUG_MODE) console.log('$$$$ shipping label final results: %j $$$$', results);
         }
@@ -298,12 +317,24 @@ function ShippingLabelInfo() {
 }
 
 function readXlsx(){
-  let upload_data_worksheet = [];
+  var upload_data, parentid_data, total_data=[];
   if ( workbook.SheetNames.indexOf('Upload_Data') >= 0 ) {
-    upload_data_worksheet = workbook.Sheets['Upload_Data'];
-    upload_data_worksheet = XLSX.utils.sheet_to_json(upload_data_worksheet);
+    let upload_data_worksheet = workbook.Sheets['Upload_Data'];
+    upload_data = XLSX.utils.sheet_to_json(upload_data_worksheet);
   }
-  return upload_data_worksheet;
+  if (workbook.SheetNames.indexOf('Parent_ID_Order') >= 0 ) {
+    let parentid_order_worksheet = workbook.Sheets['Parent_ID_Order'];
+    parentid_data = XLSX.utils.sheet_to_json(parentid_order_worksheet); 
+  }
+  Array.prototype.push.apply(total_data, upload_data);
+  Array.prototype.push.apply(total_data, parentid_data);
+  console.log('upload_data_tab containing '
+	  .concat(upload_data.length.toString())
+	  .concat(' orders!'));
+  console.log('parentid_order_tab containing '
+          .concat(parentid_data.length.toString())
+	  .concat(' orders!'));
+  return total_data;
 }
 
 function createLabel(){
@@ -326,7 +357,7 @@ function createLabel(){
     if(++row_count == xlsxdata.length){
       return;
     }
-    setTimeout(labelLoop, 3000);
+    setTimeout(labelLoop, 5000);
   }
 
 }
