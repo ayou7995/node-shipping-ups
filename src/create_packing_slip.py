@@ -1,3 +1,4 @@
+import os
 import sys
 import cv2
 import argparse
@@ -50,18 +51,21 @@ def toRatio(img):
     bpad = wantedHeight - imgHeight - tpad
     return cv2.copyMakeBorder(img, tpad, bpad, 0, 0, cv2.BORDER_CONSTANT, value = [255,255,255])
 
-ps_template_path = 'C:\\Users\\TC710-Admin\\Desktop\\ayou7995\\SoundBot\\create_label\\PackingSlipTemplate.png';
-# ps_template_path = '/home/ayou7995/NTUEE/8th_semester/SoundBot/create_label/PackingSlipTemplate.png';
+if os.path.isdir('C:\\Users\\TC710-Admin\\Desktop\\ayou7995\\SoundBot\\'):
+    ps_template_path = 'C:\\Users\\TC710-Admin\\Desktop\\ayou7995\\SoundBot\\create_label\\PackingSlipTemplate.png';
+else:
+    ps_template_path = '/home/ayou7995/NTUEE/8th_semester/SoundBot/create_label/PackingSlipTemplate.png';
 if __name__ == '__main__':
     
     img = cv2.imread(ps_template_path, cv2.IMREAD_COLOR)
-    shape = img.shape
  
+    packing_slip_data = sys.argv[1:-2] # index.js passed in packing slip data
+    tracking_number = sys.argv[-2]
+    packing_slip_path = sys.argv[-1] 
+
+    # Query order data with same parent_orderid
     cnx = mysql.connector.connect(user='root', password='', database='groupondb')
     cursor = cnx.cursor(buffered=True)
-
-    ps_data = sys.argv[1:]
-    orderid = ps_data[1]
     cursor.execute("""  SELECT o.order_date, o.orderid, o.parent_orderid, 
                                ri.shipment_addr_name, ri.shipment_addr_street_1,
                                ri.shipment_addr_street_2, ri.shipment_addr_city,
@@ -75,50 +79,63 @@ if __name__ == '__main__':
                         ON oi.bom_sku = p.bom_sku
                         JOIN RECEIVER_INFO as ri
                         ON oi.fulfillment_id = ri.fulfillment_id
-                        WHERE o.orderid = '""" + orderid + "'")
-    db_fetch_data = cursor.fetchall()
+                        WHERE o.parent_orderid = '""" + packing_slip_data[2] + "'")
+    db_fetch_datas = cursor.fetchall()
+    cursor.close()
+    cnx.close()
+    
+    if db_fetch_datas:
+        # update order_date, method, gift_message
+        # packing_slip_data #10 ~ #14 will directly come from db_fetch_datas 
+        packing_slip_data[0] = db_fetch_datas[0][0] 
+        packing_slip_data[9] = db_fetch_datas[0][9]
+        packing_slip_data[15] = db_fetch_datas[0][15]
 
-    if db_fetch_data:
-        db_fetch_data = list(db_fetch_data[0])
-
-        ps_data[0] = db_fetch_data[0]
-        ps_data[5] = db_fetch_data[5]
-        ps_data[9] = db_fetch_data[9]
-        ps_data[11] = db_fetch_data[11]
-        ps_data[13] = db_fetch_data[13]
-        ps_data[15] = db_fetch_data[15]
-
-        putText(img, ps_data[0].strftime('%Y-%m-%d'), DATE_BEGIN_WIDTH, DATE_BEGIN_HEIGHT)
-        putText(img, ps_data[1], DATE_BEGIN_WIDTH, ORDERID_BEGIN_HEIGHT)
-        putText(img, ps_data[2], PARENTID_BEGIN_WIDTH, PARENTID_BEGIN_HEIGHT)
+        # order_date
+        putText(img, packing_slip_data[0].strftime('%Y-%m-%d'), DATE_BEGIN_WIDTH, DATE_BEGIN_HEIGHT) 
+        # orderid
+        putText(img, packing_slip_data[1], DATE_BEGIN_WIDTH, ORDERID_BEGIN_HEIGHT)
+        # parent_orderid
+        putText(img, packing_slip_data[2], PARENTID_BEGIN_WIDTH, PARENTID_BEGIN_HEIGHT) 
+        # shipment_address_info
         for i in range(3,9):
             width = SHIPTO_BEGIN_WIDTH
             height = SHIPTO_BEGIN_HEIGHT + i * ROW_HEIGHT
             if i == 7:
-                width = width + len(ps_data[i-1]) * WORD_WIDTH
+                width = width + len(packing_slip_data[i-1]) * WORD_WIDTH
             if i >=7:
                 height = height - ROW_HEIGHT
-            putText(img, ps_data[i], width, height)
-        putText(img, ps_data[9], SHIPTO_BEGIN_WIDTH, PARENTID_BEGIN_HEIGHT)
-        putText(img, ps_data[10], IN_BEGIN_WIDTH, ITEM_BEGIN_HEIGHT)
-        putText(img, ps_data[11], UPC_BEGIN_WIDTH, ITEM_BEGIN_HEIGHT)
-        putText(img, ps_data[12], SKU_BEGIN_WIDTH, ITEM_BEGIN_HEIGHT)
+            putText(img, packing_slip_data[i], width, height)
+        # shipping_method
+        putText(img, packing_slip_data[9], SHIPTO_BEGIN_WIDTH, PARENTID_BEGIN_HEIGHT)
 
-        item_des = chunkstring(ps_data[13], ITEM_DESCRIPTION_SENT_LENGTH)
-        for i in range(len(item_des)):
-            putText(img, item_des[i], ID_BEING_WIDTH, ITEM_BEGIN_HEIGHT + ROW_HEIGHT * i)
-        putText(img, str(ps_data[14]), QTY_BEGIN_WIDTH, ITEM_BEGIN_HEIGHT)
-
-        gift_msg = chunkstring(ps_data[15], GIFT_MESSAGE_SENT_LENGTH)
+        ## multiple items for same parent_orderid
+        track_row = 0
+        for fetch_data in db_fetch_datas: 
+            # item_number
+            putText(img, fetch_data[10], IN_BEGIN_WIDTH, ITEM_BEGIN_HEIGHT + track_row * ROW_HEIGHT)
+            # UPC
+            putText(img, fetch_data[11], UPC_BEGIN_WIDTH, ITEM_BEGIN_HEIGHT + track_row * ROW_HEIGHT) 
+            # SKU
+            putText(img, fetch_data[12], SKU_BEGIN_WIDTH, ITEM_BEGIN_HEIGHT + track_row * ROW_HEIGHT)
+            # item_description
+            item_des = chunkstring(fetch_data[13], ITEM_DESCRIPTION_SENT_LENGTH) 
+            for i in range(len(item_des)):
+                putText(img, item_des[i], ID_BEING_WIDTH, ITEM_BEGIN_HEIGHT + (i + track_row) * ROW_HEIGHT)
+            # quantity
+            putText(img, str(fetch_data[14]), QTY_BEGIN_WIDTH, ITEM_BEGIN_HEIGHT + track_row * ROW_HEIGHT) 
+            track_row += len(item_des)
+        # gift_message
+        gift_msg = chunkstring(packing_slip_data[15], GIFT_MESSAGE_SENT_LENGTH)
         for i in range(len(gift_msg)):
             putText(img, gift_msg[i], GM_BEGIN_WIDTH, GIFT_BEGIN_HEIGHT + ROW_HEIGHT * i)
 
         labelImgHeight = img.shape[0]
         labelImgWidth = img.shape[1]
 
-        # BARCODE
-        barcode_path = '{0}/{1}_barcode.png'.format(ps_data[16],ps_data[17])
-        code128.image(ps_data[1]).save(barcode_path)
+        ## BARCODE puts the first orderid
+        barcode_path = packing_slip_path.replace('ps','barcode')
+        code128.image(tracking_number).save(barcode_path)
         barcode_img = cv2.imread(barcode_path)
         
         barImgHeight = barcode_img.shape[0]
@@ -129,6 +146,4 @@ if __name__ == '__main__':
         img[tpad:tpad+barImgHeight, lpad:lpad+barImgWidth, :] = barcode_img
         img = toRatio(img)
 
-    cv2.imwrite('{0}/{1}_{2}_ps.png'.format(ps_data[16], ps_data[17], ps_data[2]), img)
-    cursor.close()
-
+        cv2.imwrite(packing_slip_path, img)

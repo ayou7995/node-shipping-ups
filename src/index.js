@@ -99,6 +99,7 @@ function createPackingSlip(obj) {
   PythonShell.run('create_packing_slip.py', create_ps_options, function (err, results) {
     if (err) throw err;
     else{
+      summary[obj.index_ref2]['PackingSlip'] = true;
       if (DEBUG_MODE)  console.log('$$$$ create packing slip final results: %j $$$$', results);
     }
   });
@@ -115,38 +116,43 @@ function createShippingLabel(obj) {
 
   run(data, option);
 
-  async function asyncUPSCall(data, option) {
-    var returnValue;
-    var upsCall =  await new Promise (
+	function acceptOrder(conf) { // conf stands for confirmed result
+    if (conf != null) {             
+			if (conf.hasOwnProperty('ShipmentDigest')) {  
+				ups.accept(conf.ShipmentDigest, function(err, conf) { 
+					if(err){
+						reject(err); 
+					}      
+					else{ 
+						if(conf.hasOwnProperty('ShipmentResults')){ 
+							if(conf['ShipmentResults'].hasOwnProperty('PackageResults')){
+								if(obj.service ==='Expedited Mail Innovations'){					
+									summary[obj.index_ref2]['TrackingNumber'] = conf['ShipmentResults']['PackageResults']['USPSPICNumber'];								
+								}
+								else if (obj.service === 'Ground' || obj.service === 'SurePost 1 lb or Greater') {
+									summary[obj.index_ref2]['TrackingNumber'] = conf['ShipmentResults']['PackageResults']['TrackingNumber'];	
+								}
+								if(conf['ShipmentResults']['PackageResults'].hasOwnProperty('LabelImage')){ 
+									if(conf['ShipmentResults']['PackageResults']['LabelImage'].hasOwnProperty('GraphicImage')){
+										confolve({
+											image : conf.ShipmentResults.PackageResults.LabelImage.GraphicImage,
+											data : obj   
+										});
+									} 
+								}
+							}
+						}
+					}
+				})
+			} 
+		}
+	}
+  function asyncUPSCall(data, option) {
+    var upsCall =  new Promise (
       (resolve, reject) => {
         ups.confirm(data, option, function(err, res) {
           if(err) {
             reject(err);
-            //throw err;
-          }
-          if (res != null) {
-            if (res.hasOwnProperty('ShipmentDigest')) {
-              ups.accept(res.ShipmentDigest, function(err, res) {
-                if(err){
-                  reject(err);
-                  //throw err;
-                }
-                else{
-                  if(res.hasOwnProperty('ShipmentResults')){
-                    if(res['ShipmentResults'].hasOwnProperty('PackageResults')){
-                      if(res['ShipmentResults']['PackageResults'].hasOwnProperty('LabelImage')){
-                        if(res['ShipmentResults']['PackageResults']['LabelImage'].hasOwnProperty('GraphicImage')){
-                          resolve({
-                            image : res.ShipmentResults.PackageResults.LabelImage.GraphicImage, 
-                            data : obj
-                          });
-                        }
-                      }               
-                    }
-                  }
-                }
-              })
-            }
           }
         });
       }
@@ -165,7 +171,6 @@ function createShippingLabel(obj) {
         console.log(reject);
       }
     })
-    return returnValue;
   }
   async function run(data, option) {
     var result = await asyncUPSCall(data, option);
@@ -186,6 +191,7 @@ function createShippingLabel(obj) {
       PythonShell.run('add_reference.py', add_ref_options, function (err, results) {
         if (err) console.log(err);
         else {
+	  summary[obj.index_ref2]['ShippingLabel'] = true; 
           if (DEBUG_MODE) console.log('$$$$ shipping label final results: %j $$$$', results);
         }
       });
@@ -194,35 +200,6 @@ function createShippingLabel(obj) {
       if (DEBUG_MODE) console.log(obj.index_ref2.concat(' fail to create shipping label'))
     }
   }
-  //.then(function(result) {
-    //if (result == null || typeof result === 'undefined') {
-      //let add_ref_options = {
-        //mode: 'text',
-        //pythonPath: '/usr/bin/python',
-        //scriptPath: python_script_path,
-        //args: [
-          //path.join(label_dir, result.name), 
-          //obj.fulfillment_line_item_id_ref1, 
-          //'SoundBotGroupon',
-          //obj.MasterSalesOrderNum_ref5,
-          //obj.SKU_QTY,
-          //obj.packing_package_type
-        //]
-      //};
-      //PythonShell.run('add_reference.py', add_ref_options, function (err, results) {
-        //if (err) throw err;
-        //else {
-          //if (DEBUG_MODE) console.log('shipping label final results: %j', results);
-        //}
-      //});
-    //}
-    //else{
-      //console.log(obj.index_ref2.concat(' fail to create shipping label'))
-    //}
-  //}).catch(function(e) {
-    //console.log('second then');
-    //console.log(e); // "oh, no!"
-  //})
 };
 
 function ShippingLabelInfo() {
@@ -337,19 +314,25 @@ function readXlsx(){
   return total_data;
 }
 
-function createLabel(){
+var summary = {};
+async function createLabel(){
 
   var xlsxdata = readXlsx();
   var row_count = 0;
-  labelLoop();
+  await labelLoop();
   function labelLoop(){
     let obj = xlsxdata[row_count];
     var option = {};
-    console.log(row_count);
-    console.log(obj.index_ref2);
-    console.log(obj.service);
+    // console.log(row_count);
+    // console.log(obj.index_ref2);
+    // console.log(obj.service);
 
     if (obj.service !== 'Error') {
+      summary[obj.index_ref2] = {
+      	'TrackingNumber': '',
+        'PackingSlip': false,
+        'ShippingLabel': false,
+      };
       createShippingLabel(obj);
       createPackingSlip(obj);
     } 
@@ -359,7 +342,6 @@ function createLabel(){
     }
     setTimeout(labelLoop, 5000);
   }
-
 }
 createLabel();
 //function printShippingLabel() {

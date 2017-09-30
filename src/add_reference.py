@@ -11,23 +11,21 @@ def toRatio(img):
     rpad = wantedWidth - imgWidth - lpad
     return cv2.copyMakeBorder(img, 0, 0, lpad, rpad, cv2.BORDER_CONSTANT, value = [255,255,255])
 
-
 if __name__ == '__main__':
 
-    gif_name = sys.argv[1]
-    ref_1 = sys.argv[2]
-    ref_2 = sys.argv[3]
-    ref_3 = sys.argv[4]
-    ref_4 = sys.argv[5]
-    ref_5 = sys.argv[6]
-    png_name = gif_name.replace('gif','png') 
+    ref_1 = sys.argv[1]
+    ref_2 = sys.argv[2]
+    ref_3 = sys.argv[3]
+    ref_4 = sys.argv[4]
+    ref_5 = sys.argv[5]
+    shipping_label_path = sys.argv[6]
 
-    # gif to png
-    img = Image.open(gif_name).rotate(-90, expand=True)
-    img.save(png_name, 'png')
+    # rotate image
+    img = Image.open(shipping_label_path).rotate(-90, expand=True)
+    img.save(shipping_label_path, 'png')
 
     # add reference
-    img = cv2.imread(png_name, cv2.IMREAD_COLOR)
+    img = cv2.imread(shipping_label_path, cv2.IMREAD_COLOR)
     shape = img.shape
     img = cv2.copyMakeBorder(img, 0, 300, 0, 0, cv2.BORDER_CONSTANT, value = [255,255,255])
     font = cv2.FONT_HERSHEY_SIMPLEX
@@ -43,4 +41,4 @@ if __name__ == '__main__':
     cv2.putText(img,ref_5,(80,shape[0]+270), font, 0.7, (0,0,0), 1, cv2.LINE_AA)
     img = toRatio(img)
     
-    cv2.imwrite(png_name, img)
+    cv2.imwrite(shipping_label_path, img)
