@@ -3,6 +3,8 @@ var util = require('util');
 var fetch = require('node-fetch');
 var _ = require('lodash');
 
+var UpsError = require('./upserror.js').UpsError;
+
 /**********  general purpose **********/
 function buildUpsSecurity(){
   return {
@@ -62,16 +64,21 @@ function buildXAVRequest(data) {
   }
 }
 
-function handleAddressValidationResponse(json) {
+function handleAddressValidationResponse(index_ref2, json, DEBUG = false) {
+  if( DEBUG ) {
+    console.log('--handleAddressValidationResponse--');
+    console.log(util.inspect(json, {depth: null}));
+  }
   let error = _.get(json,['XAVResponse','Error'], null);
   if (error) {
-    return null;
+    throw new UpsError(index_ref2, 'Address Validation Failure', error.ErrorCode, error.ErrorDescription);
   }
   let candidate = _.get(json,['XAVResponse','Candidate'], null);
   if (candidate) {
     return candidate.AddressKeyFormat;    
+  } else {
+    throw new UpsError(index_ref2, 'Address Validation Failure', '100', 'No address key candidate, missing or invalid address!!');
   }
-  return null;
 }
 
 /**********  shipment confirm  **********/
@@ -87,16 +94,29 @@ function confirmShipment (data, inProduction = false) {
   return fetch(url, options);
 }
 
-function handleShipmentResponse(json) {
+function handleShipmentResponse(index_ref2, json, DEBUG = false) {
+  if( DEBUG ) {
+    console.log('--handleShipmentResponse--');
+    console.log(util.inspect(json, {depth: null}));
+  }
+  let error = _.get(json,['Fault','detail','Errors'], null);
+  if (error) {
+    error_code = _.get(error, ['ErrorDetail', 'PrimaryErrorCode', 'Code'], null);
+    error_description = _.get(error, ['ErrorDetail', 'PrimaryErrorCode', 'Description'], null);
+    throw new UpsError(index_ref2, 'Shipment Request Failure', error_code , error_description);
+  }
   let package_results = _.get(json, ['ShipmentResponse','ShipmentResults','PackageResults'], null);
   let tracking_number = _.get(package_results, 'TrackingNumber', null);
   let uspspicnumber = _.get(package_results, 'USPSPICNumber', null);
   let graphic_image = _.get(package_results, ['ShippingLabel', 'GraphicImage'], null);
-  if ( tracking_number === null ) return null;
-  return {
-    'tracking_number': tracking_number,
-    'uspspicnumber': uspspicnumber,
-    'graphic_image': graphic_image,
+  if ( tracking_number === null ) {
+    throw new UpsError(index_ref2 + 'Shipment Request Failure', '200', 'Fail to get tracking number');
+  } else {
+    return {
+      'tracking_number': tracking_number,
+      'uspspicnumber': uspspicnumber,
+      'graphic_image': graphic_image,
+    }
   }
 }
 

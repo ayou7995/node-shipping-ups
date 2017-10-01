@@ -6,27 +6,34 @@ var argv = require('argv');
 const path = require('path');
 var mkdirp = require('mkdirp');
 var fetch = require('node-fetch');
-var upscall = require('./upscall.js');
 var base64Img = require('base64-img');
 var dateFormat = require('dateformat');
 var PythonShell = require('python-shell');
+
+var upscall = require('./upscall.js');
+var UpsError = require('./upserror.js').UpsError;
 
 var args = argv.option([
   {
     name: 'date',
     short: 'd',
     type: 'string',
+    description: 'Speicifiy the date for reading Groupon-Upload excel file',
   },
   {
     name: 'debug',
+    short: 'b',
     type: 'boolean',
+    description: 'Specify to set debug mode to true',
   }
 ]).run();
 
-var DEBUG_MODE;
+var DEBUG_MODE = false;
 if (args.options.hasOwnProperty('debug')) {
-  DEBUG_MODE = args.options.debug;
+  DEBUG_MODE = true;
+  console.log('Debug Mode On');
 }
+
 var process_date = dateFormat(new Date(), "yyyymmdd");
 if (args.options.hasOwnProperty('date')) {
   process_date = args.options.date;
@@ -77,23 +84,32 @@ function processBatch(filename){
     workbook = XLSX.readFile(filename);
   }
   catch(err){ 
-    console.log(err);
+    if (err instanceof Error) {
+      if (DEBUG_MODE) console.log(err);
+      else console.log(err.name + ': ' + err.message);
+    }
     process.exit(1);
   }
   let xlsxdata = readXlsx(workbook);
-  let row_count = 0;
-  labelLoop();
-  function labelLoop(){
+
+  //let stats = function() {
+    //this.success = 0;
+    //this.faillist = [];
+  //};
+  let row_count = 0, total_data = 5; //xlsxdata.length;
+  let stats = {'total_data': total_data, 'success': 0, 'faillist': []};
+  labelLoop(stats, total_data);
+  function labelLoop(stats, total_data){
     let obj = xlsxdata[row_count];
-    console.log('[',obj.index_ref2,']');
+    console.log('[ '+obj.index_ref2+' ]');
 
     if (obj.service !== 'Error') {
-      createLabel(obj);
+      createLabel(obj, stats, total_data);
     } 
-    if(++row_count == 10){ //xlsxdata.length){
-      return;
+    if(++row_count == 5){ //xlsxdata.length){
+      return stats;
     }
-    setTimeout(labelLoop, 4000);
+    setTimeout(()=>{labelLoop(stats, total_data)}, 2000);
   }
 }
 processBatch(path.join(groupon_ups_upload_dir, 'Groupon_'.concat(process_date).concat('.xlsx')));
@@ -106,44 +122,37 @@ function parseJson(response) {
   if(contentType && contentType.includes("application/json")) {
     return response.json();
   }
-  throw new TypeError("Oops, we haven't got JSON!");
+  throw new TypeError("Oops, response from " + repsonse.url + ' is not in JSON format');
 }
 
 function updateOrder(obj, address_key) {
   obj.shipment_address_street = address_key.AddressLine;
   obj.shipment_address_city = address_key.PoliticalDivision2;
   obj.shipment_address_state = address_key.PoliticalDivision1;
-  obj.shipment_address_postal_code = address_key.PostcodePrimaryLow;
+  //obj.shipment_address_postal_code = address_key.PostcodePrimaryLow;
   obj.shipment_address_country = address_key.CountryCode;
 }
 
-async function createLabel (obj) {
-  let index_prefix = '[' + obj.index_ref2 + '] ';
+async function createLabel (obj, stats, total) {
+  //console.log('stats', stats);
+  let index_ref2 = obj.index_ref2;
   try {
     let response;
     // UPS Address Validation
     response = await upscall.validateAddress( createUnsureAddrInfo(obj) );
     response = await parseJson(response);
-    let address_key = await upscall.handleAddressValidationResponse(response); 
-    if ( address_key === null ){
-      throw new Error(index_prefix + 'Address Validation Failure');
-    }
-    // Update order object with return address key.
+    let address_key = await upscall.handleAddressValidationResponse(index_ref2, response, DEBUG_MODE); 
     updateOrder(obj, address_key);
 
     // One phase Shipment Request 
     let tracking_number, graphic_image;
     response = await upscall.confirmShipment( createShippingLabelInfo(obj) );
     response = await parseJson(response);
-    label_info = await upscall.handleShipmentResponse(response);
-    if ( label_info === null ) {
-      throw new Error(index_prefix + 'Shipment Request Failure');
-    } else {
-      tracking_number = (obj.service==='Expedited Mail Innovations' 
-                         ? label_info.uspspicnumber 
-                         : label_info.tracking_number);
-      graphic_image = label_info.graphic_image;
-    }
+    label_info = await upscall.handleShipmentResponse(index_ref2, response, DEBUG_MODE);
+    tracking_number = (obj.service==='Expedited Mail Innovations' 
+                       ? label_info.uspspicnumber 
+                       : label_info.tracking_number);
+    graphic_image = label_info.graphic_image;
 
     // Complete Shipping Label
     let shippingLabelPath = '', callShippingLabelTime = 0;
@@ -151,7 +160,7 @@ async function createLabel (obj) {
       callShippingLabelTime++;
       shippingLabelPath = await completeShippingLabel(obj, graphic_image); 
       if( callShippingLabelTime === 5 && ! Boolean(shippingLabelPath) ) {
-        throw new Error(index_prefix + 'Fail to complete shipping label');
+        throw new UpsError(index_ref2 ,'Fail to complete shipping label');
       }
     }
 
@@ -161,30 +170,41 @@ async function createLabel (obj) {
       callPackingSlipTime++;
       packingSlipPath = await completePackingSlip(obj, tracking_number);
       if( callPackingSlipTime === 5  && ! Boolean(packingSlipPath) ) {
-        throw new Error(index_prefix + 'Fail to complete packing slip');
+        throw new UpsError(index_ref2, 'Fail to complete packing slip');
       }
     }
 
     // Combine shipping label and packing slip into pdf
-    let index = obj.index_ref2;
-    let pdf_name = path.join(label_dir, index.concat('_').concat(obj.Parent_ID).concat('.pdf')); // ex. 00001_123456789.pdf
+    let pdf_name = path.join(label_dir, index_ref2.concat('_').concat(obj.Parent_ID).concat('.pdf')); // ex. 00001_123456789.pdf
     let isCombinationDone = false, callCombinationTime = 0;
     while( callCombinationTime < 5 && ! isCombinationDone ) {
       callCombinationTime++;
       isCombinationDone = await combine2PDF(shippingLabelPath, packingSlipPath, pdf_name);
       if( callCombinationTime === 5 && ! isCombinationDone ) {
-        throw new Error(index_prefix + 'Fail to combine shipping label and packing slip');
+        throw new UpsError(index_ref2, 'Fail to combine shipping label and packing slip');
       }
     }
-    // Process done!!!!!!!!
-    console.log(index_prefix + 'process done!!!!');
+    console.log('[ ' + index_ref2 + ' ] process done!!!!');
+    stats['success'] ++;
+    outputStats(stats, total);
   }
   catch (err) {
     if(DEBUG_MODE) console.log(err);
     else{
-      console.log(err.name);
-      console.log(err.message);
+      if ( err instanceof UpsError ) {
+        console.log('[ '+ err.index+' ]', err.name, err.message, '-', err.code, err.description);
+      } else { 
+        console.log(err.name, err.message);
+      }
     }
+    stats['faillist'].push(err.index);
+    outputStats(stats, total);
+  }
+}
+
+function outputStats(stats, total){
+  if(stats['success']+stats['faillist'].length == total){
+    console.log(stats);
   }
 }
 
