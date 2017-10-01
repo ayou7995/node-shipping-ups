@@ -92,11 +92,7 @@ function processBatch(filename){
   }
   let xlsxdata = readXlsx(workbook);
 
-  //let stats = function() {
-    //this.success = 0;
-    //this.faillist = [];
-  //};
-  let row_count = 0, total_data = 5; //xlsxdata.length;
+  let row_count = 0, total_data = xlsxdata.length;
   let stats = {'total_data': total_data, 'success': 0, 'faillist': []};
   labelLoop(stats, total_data);
   function labelLoop(stats, total_data){
@@ -106,10 +102,10 @@ function processBatch(filename){
     if (obj.service !== 'Error') {
       createLabel(obj, stats, total_data);
     } 
-    if(++row_count == 5){ //xlsxdata.length){
+    if(++row_count == xlsxdata.length){
       return stats;
     }
-    setTimeout(()=>{labelLoop(stats, total_data)}, 2000);
+    setTimeout(()=>{labelLoop(stats, total_data)}, 3000);
   }
 }
 processBatch(path.join(groupon_ups_upload_dir, 'Groupon_'.concat(process_date).concat('.xlsx')));
@@ -134,7 +130,6 @@ function updateOrder(obj, address_key) {
 }
 
 async function createLabel (obj, stats, total) {
-  //console.log('stats', stats);
   let index_ref2 = obj.index_ref2;
   try {
     let response;
