@@ -39,19 +39,20 @@ if (args.options.hasOwnProperty('date')) {
   process_date = args.options.date;
 }
 
-//const soundbot_base_dir = 'C:\\Users\\TC710-Admin\\Desktop\\ayou7995\\SoundBot';
-//const groupon_ups_upload_dir = 'C:\\Users\\TC710-Admin\\Dropbox\\GrouponOrders\\groupon_ups_upload';
-//const python_script_path = path.join(soundbot_base_dir, 'create_label/src/');
-//const label_dir = path.join('C:\\Users\\TC710-Admin\\Dropbox\\GrouponOrders\\labels', process_date);
-//const image_dir = path.join(label_dir, 'image');
-//const python_path = 'C:\\\\Users\\TC710-Admin\\AppData\\Local\\Programs\\Python\\Python36\\python.exe';
+const soundbot_base_dir = 'C:\\Users\\TC710-Admin\\Desktop\\ayou7995\\SoundBot';
+const groupon_ups_upload_dir = 'C:\\Users\\TC710-Admin\\Dropbox\\GrouponOrders\\groupon_ups_upload';
+const python_script_path = path.join(soundbot_base_dir, 'create_label\\src\\');
+const label_dir = path.join('C:\\Users\\TC710-Admin\\Dropbox\\GrouponOrders\\labels', process_date);
+const image_dir = path.join('C:\\Users\\TC710-Admin\\Dropbox\\GrouponOrders\\labels', process_date, 'image');
+// const image_dir = path.join(label_dir, 'image');
+const python_path = 'C:\\\\Users\\TC710-Admin\\AppData\\Local\\Programs\\Python\\Python36\\python.exe';
 
-const soundbot_base_dir = '/home/ayou7995/NTUEE/8th_semester/SoundBot/';
-const groupon_ups_upload_dir = path.join(soundbot_base_dir, 'garbagecan/groupon_ups_upload/');
-const label_dir = path.join(soundbot_base_dir, 'create_label', 'labels', process_date);
-const image_dir = path.join(label_dir, 'image');
-const python_path = '/usr/bin/python/';
-const python_script_path = path.join(soundbot_base_dir, 'create_label/src/');
+//const soundbot_base_dir = '/home/ayou7995/NTUEE/8th_semester/SoundBot/';
+//const groupon_ups_upload_dir = path.join(soundbot_base_dir, 'garbagecan/groupon_ups_upload/');
+//const label_dir = path.join(soundbot_base_dir, 'create_label', 'labels', process_date);
+//const image_dir = path.join(label_dir, 'image');
+//const python_path = '/usr/bin/python/';
+//const python_script_path = path.join(soundbot_base_dir, 'create_label/src/');
 
 mkdirp(label_dir, function (err) {
   if (err) console.error(err);
@@ -93,7 +94,7 @@ function processBatch(filename){
   let xlsxdata = readXlsx(workbook);
 
   let row_count = 0, total_data = xlsxdata.length;
-  let stats = {'total_data': total_data, 'success': 0, 'faillist': []};
+  let stats = {'total_data': total_data, 'success': 0, 'errorfile': 0, 'faillist': []};
   labelLoop(stats, total_data);
   function labelLoop(stats, total_data){
     let obj = xlsxdata[row_count];
@@ -101,8 +102,12 @@ function processBatch(filename){
 
     if (obj.service !== 'Error') {
       createLabel(obj, stats, total_data);
-    } 
-    if(++row_count == xlsxdata.length){
+    } else {
+      console.log('[ '+obj.index_ref2+' ] contains error info');
+      stats.errorfile++;
+    }
+
+    if(++row_count == total_data){
       return stats;
     }
     setTimeout(()=>{labelLoop(stats, total_data)}, 3000);
@@ -198,7 +203,7 @@ async function createLabel (obj, stats, total) {
 }
 
 function outputStats(stats, total){
-  if(stats['success']+stats['faillist'].length == total){
+  if(stats['success']+stats['errorfile']+stats['faillist'].length == total){
     console.log(stats);
   }
 }
@@ -213,7 +218,7 @@ function completeShippingLabel(obj, graphic_image) {
   let add_reference_options = {
     //mode: 'text',
     //pythonPath: python_path,
-    //scriptPath: python_script_path,
+    scriptPath: python_script_path,
     args: [
       obj['fulfillment_line_item_id_ref1'], 
       obj['Cost Center'], //'SoundBotGroupon',
@@ -225,8 +230,11 @@ function completeShippingLabel(obj, graphic_image) {
   };
   return new Promise( (resolve, reject) => {
     PythonShell.run('add_reference.py', add_reference_options, function (err, results) {
-      if (err) reject('completeShippingLabel fail');
-      resolve(shipping_label_path);
+      if (err) {
+        throw new UpsError(obj.index_ref2, 'completeShippingLabel fail', '', err.message);
+      } else {
+        resolve(shipping_label_path);
+      }
     })
   });
 }
@@ -235,7 +243,7 @@ function completePackingSlip(obj, tracking_number) {
   let create_packingslip_options = {
     //mode: 'text',
     //pythonPath: python_path,
-    //scriptPath: python_script_path,
+    scriptPath: python_script_path,
     args: [
       'item order date',
       obj.MasterSalesOrderNum_ref5,
@@ -259,8 +267,11 @@ function completePackingSlip(obj, tracking_number) {
   };
   return new Promise( (resolve,reject) => {
     PythonShell.run('create_packing_slip.py', create_packingslip_options, function (err, results) {
-      if (err) reject(err);
-      resolve(packing_slip_path);
+      if (err) {
+        throw new UpsError(obj.index_ref2, 'completePackingSlip fail', '', err.message);
+      } else {
+	resolve(packing_slip_path);
+      }
     })
   });
 }
@@ -269,7 +280,7 @@ function combine2PDF(slPath, psPath, filename){
   let combine_to_pdf_options = {
     //mode: 'text',
     //pythonPath: python_path,
-    //scriptPath: python_script_path,
+    scriptPath: python_script_path,
     args: [
       slPath,
       psPath,
@@ -278,8 +289,11 @@ function combine2PDF(slPath, psPath, filename){
   };
   return new Promise( (resolve,reject) => {
     PythonShell.run('combine2pdf.py', combine_to_pdf_options, function (err, results) {
-      if (err) reject(err);
-      resolve(true);
+      if (err) {
+        throw new UpsError(obj.index_ref2, 'combine2PDF fail', '', err.message);
+      } else {
+	resolve(true);
+      }
     })
   });
 }
